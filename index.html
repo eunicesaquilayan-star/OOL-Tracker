@@ -546,14 +546,8 @@ async function importExcel() {
     return;
   }
 
-  const overlay = document.getElementById("loadingOverlay");
-const progress = document.getElementById("loadingProgress");
-
-overlay.style.display = "none";
-progress.innerText = "Starting...";
-  
   const statusText = document.getElementById("importStatus");
-  statusText.innerText = "Reading Excel file... please wait.";
+  statusText.innerText = "Reading Excel file...";
 
   isImporting = true;
 
@@ -568,7 +562,6 @@ progress.innerText = "Starting...";
     try {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array", cellDates: true });
-
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
 
@@ -576,101 +569,20 @@ progress.innerText = "Starting...";
 
       if (!rows.length) {
         alert("No data found.");
-        loadData();
         return;
       }
-     
 
-      let batch = db.batch();
-      let count = 0;
-      let imported = 0;
+      statusText.innerText = `Preparing to import ${rows.length} rows...`;
 
-      const BATCH_SIZE = 450;
+      await processImportChunks(rows, 450);
 
-      for (const row of rows) {
-        const lookup = String(row["LOOKUP"] || "").trim();
-        if (!lookup) continue;
-
-        const supplierShipDate = normalizeDate(row["Supplier Ship Date"]);
-        const ddcShipDate = normalizeDate(row["DDC Ship Date"]);
-        const ssShipDate = normalizeDate(row["SS Ship Date"]);
-        const calculatedDateRequested = normalizeDate(row["Calculated Date Requested"]);
-        const orderDate = normalizeDate(row["Order Date"]);
-
-        const priority = calculatePriority(
-          supplierShipDate || ddcShipDate || ssShipDate || calculatedDateRequested
-        );
-
-        const docRef = db.collection(COLLECTION).doc(lookup);
-
-        batch.set(docRef, {
-          lookup,
-          strategicAccountLead: row["Strategic Account Lead"] || "",
-          shippedStatus: row["Shipped Status"] || "",
-          csd: row["CSD"] || "",
-          am: row["AM"] || "",
-          orderNumber: row["Order #"] || "",
-          lineNumber: row["Line #"] || "",
-          poCode: row["PO Code"] || "",
-          lineType: row["Line Type"] || "",
-          lineClosed: row["Line Closed"] || "",
-          itemCode: row["Item Code"] || "",
-          itemDescription: row["Item Description"] || "",
-          qtyOrdered: Number(row["Qty Ordered"] || 0),
-          sellUom: row["Sell UOM"] || "",
-          totalOpenCost: Number(row["Total Open Cost"] || 0),
-          extendedOpenAmt: Number(row["Extended Open Amt"] || 0),
-          qtySellUom: Number(row["Qty in Sell UOM"] || 0),
-          prodCode: row["Prod Code"] || "",
-          supplier: row["Supplier"] || "",
-          supplierName: row["Supplier Name"] || "",
-          customerCategory: row["Customer Category"] || "",
-          customerCategoryName: row["Customer Category Name"] || "",
-          customerPO: row["Customer PO"] || "",
-          boFlag: row["BO Flag"] || "",
-          boQty: Number(row["BO Qty"] || 0),
-          orderType: row["Order Type"] || "",
-          orderType1: row["Order Type 1"] || "",
-          ssShipDate,
-          ddcShipDate,
-          supplierShipDate,
-          orderDate,
-          calculatedDateRequested,
-          exportDate: normalizeDate(row["Export Date"]),
-          warehouse: row["Warehouse"] || "",
-          customerName: row["Customer Name"] || "",
-          supplierEmail: row["Supplier Email"] || "",
-          priority,
-          status: row.status || "Open",
-          updatedFromPowerBIAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true });
-
-        count++;
-        imported++;
-
-        if (count === BATCH_SIZE) {
-          await batch.commit();
-
-          statusText.innerText = `Importing... ${imported} rows processed`;
-
-          batch = db.batch();
-          count = 0;
-
-          await new Promise(resolve => setTimeout(resolve, 50));
-        }
-      }
-
-      if (count > 0) {
-        await batch.commit();
-      }
-
-      statusText.innerText = `Import completed. ${imported} rows uploaded/updated.`;
-      alert(`Import completed. ${imported} rows uploaded/updated.`);
+      statusText.innerText = `Import completed. ${rows.length} rows processed.`;
+      alert(`Import completed. ${rows.length} rows processed.`);
 
     } catch (error) {
       console.error(error);
-      alert("Import failed. Please check console for details.");
-      statusText.innerText = "Import failed.";
+      statusText.innerText = "Import failed. Please check console.";
+      alert("Import failed. Please check console.");
     } finally {
       isImporting = false;
       loadData();
@@ -678,6 +590,95 @@ progress.innerText = "Starting...";
   };
 
   reader.readAsArrayBuffer(file);
+}
+
+  async function processImportChunks(rows, chunkSize = 450) {
+  const statusText = document.getElementById("importStatus");
+
+  let processed = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+
+    let batch = db.batch();
+    let writeCount = 0;
+
+    for (const row of chunk) {
+      const lookup = String(row["LOOKUP"] || "").trim();
+
+      if (!lookup) {
+        skipped++;
+        continue;
+      }
+
+      const supplierShipDate = normalizeDate(row["Supplier Ship Date"]);
+      const ddcShipDate = normalizeDate(row["DDC Ship Date"]);
+      const ssShipDate = normalizeDate(row["SS Ship Date"]);
+      const calculatedDateRequested = normalizeDate(row["Calculated Date Requested"]);
+      const orderDate = normalizeDate(row["Order Date"]);
+
+      const priority = calculatePriority(
+        supplierShipDate || ddcShipDate || ssShipDate || calculatedDateRequested
+      );
+
+      const docRef = db.collection(COLLECTION).doc(lookup);
+
+      batch.set(docRef, {
+        lookup,
+        strategicAccountLead: row["Strategic Account Lead"] || "",
+        shippedStatus: row["Shipped Status"] || "",
+        csd: row["CSD"] || "",
+        am: row["AM"] || "",
+        orderNumber: row["Order #"] || "",
+        lineNumber: row["Line #"] || "",
+        poCode: row["PO Code"] || "",
+        lineType: row["Line Type"] || "",
+        lineClosed: row["Line Closed"] || "",
+        itemCode: row["Item Code"] || "",
+        itemDescription: row["Item Description"] || "",
+        qtyOrdered: Number(row["Qty Ordered"] || 0),
+        sellUom: row["Sell UOM"] || "",
+        totalOpenCost: Number(row["Total Open Cost"] || 0),
+        extendedOpenAmt: Number(row["Extended Open Amt"] || 0),
+        qtySellUom: Number(row["Qty in Sell UOM"] || 0),
+        prodCode: row["Prod Code"] || "",
+        supplier: row["Supplier"] || "",
+        supplierName: row["Supplier Name"] || "",
+        customerCategory: row["Customer Category"] || "",
+        customerCategoryName: row["Customer Category Name"] || "",
+        customerPO: row["Customer PO"] || "",
+        boFlag: row["BO Flag"] || "",
+        boQty: Number(row["BO Qty"] || 0),
+        orderType: row["Order Type"] || "",
+        orderType1: row["Order Type 1"] || "",
+        ssShipDate,
+        ddcShipDate,
+        supplierShipDate,
+        orderDate,
+        calculatedDateRequested,
+        exportDate: normalizeDate(row["Export Date"]),
+        warehouse: row["Warehouse"] || "",
+        customerName: row["Customer Name"] || "",
+        supplierEmail: row["Supplier Email"] || "",
+        priority,
+        status: row.status || "Open",
+        updatedFromPowerBIAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      writeCount++;
+      processed++;
+    }
+
+    if (writeCount > 0) {
+      await batch.commit();
+    }
+
+    statusText.innerText =
+      `Importing... ${processed} of ${rows.length} rows processed. Skipped: ${skipped}`;
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 }
 
 /* =========================
