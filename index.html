@@ -316,6 +316,7 @@ label {
             <th>Reason</th>
             <th>Next Follow-up</th>
             <th>Last Updated</th>
+            <th>Action Taken</th>
             <th>Remarks</th>
           </tr>
         </thead>
@@ -351,17 +352,29 @@ label {
       <div>
         <label>Category</label>
         <select id="editCategory">
-          <option></option>
-          <option>Backorder</option>
-          <option>Supplier Follow-up</option>
-          <option>Warehouse Follow-up</option>
-          <option>Invoice Needed</option>
-          <option>Cancellation</option>
-          <option>Missing Item</option>
-          <option>Wrong Item</option>
-          <option>Customer Update Needed</option>
-          <option>AM Escalation</option>
-          <option>Other</option>
+          <option>Supplier Invoice Needed</option>
+          <option>Backorders</option>
+          <option>Order Didn't Reach Supplier</option>
+          <option>Incorrect Cost on Invoice and/or PO</option>
+          <option>Quantity Mismatch BD vs Invoice</option>
+          <option>Wrong Supplier Code in DB</option>
+          <option>Receiving Issue</option>
+          <option>Message/Freight Lines Not Closed</option>
+          <option>Destroy Hold/Relese not yet processed</option>
+          <option>Release with suspend printing</option>
+          <option>Missing Freight</option>
+          <option>Missing Line Item</option>
+          <option>P/O closed to Vendor</option>
+          <option>Concur - Approved</option>
+          <option>Concur - Discrepancy</option>
+          <option>Concur - Discrepancy Corrected</option>
+          <option>DB Order Closed</option>
+          <option>Invoice # Supplier Spreadsheet</option>
+          <option>Sales Order with ($0 cost & sell)r</option>
+          <option>Release order - Shipped</option>
+          <option>Order Partial Shipped</option>
+          <option>DB order is being invoiced</option>
+          <option>Future Order (Requested Date)</option>
         </select>
       </div>
 
@@ -417,9 +430,40 @@ label {
       </div>
     </div>
 
+    <div>
+  <label>Action Taken</label>
+  <select id="editActionTaken">
+    <option></option>
+    <option>NEW STATUS</option>
+    <option>Sent email to supplier</option>
+    <option>Sent email to AM for Review</option>
+    <option>Sent invoice to concur</option>
+    <option>Concur - Approved</option>
+    <option>Submitted to BM to close</option>
+    <option>Submitted to RTC to close</option>
+    <option>BM Ticket - Closed</option>
+    <option>RTC - Closed</option>
+    <option>Order Retransmitted</option>
+    <option>Invoice # - Vendor Spreadsheet received</option>
+    <option>Line Deleted by AM</option>
+    <option>Line Deleted by OOL</option>
+    <option>Line Cancelled by AM</option>
+    <option>Line Cancelled by OOL</option>
+    <option>Order Deleted by AM</option>
+    <option>Order Deleted by OOL</option>
+    <option>Concur - Discrepancy Corrected by OOL</option>
+    <option>Concur - Discrepancy Corrected by Account team</option>
+    <option>Invoice received from Supplier (under review)</option>
+    <option>DB order closed</option>
+    <option>P/O closed to vendor</option>
+    <option>SKIPPED</option>
+    <option>DB order is being invoiced</option>
+  </select>
+</div>
+
     <br />
 
-    <label>Remarks / Action Taken</label>
+    <label>Remarks</label>
     <textarea id="editRemarks" rows="5" style="width:100%;"></textarea>
 
     <br /><br />
@@ -765,6 +809,7 @@ function renderTable() {
       <td>${row.reason || ""}</td>
       <td>${row.nextFollowUp || ""}</td>
       <td>${row.updatedAt?.toDate ? row.updatedAt.toDate().toLocaleString() : ""}</td>
+      <td>${row.actionTaken || ""}</td>
       <td>${row.remarks || ""}</td>
     `;
 
@@ -790,6 +835,7 @@ function openEdit(id) {
   document.getElementById("editCustomerUpdated").value = row.customerUpdatedDate || "";
   document.getElementById("editResolvedDate").value = row.resolvedDate || "";
   document.getElementById("editRemarks").value = row.remarks || "";
+  document.getElementById("editActionTaken").value = row.actionTaken || "";
 
   document.getElementById("editModal").style.display = "block";
 }
@@ -813,6 +859,7 @@ async function saveTracking() {
     category: document.getElementById("editCategory").value,
     status,
     reason: document.getElementById("editReason").value,
+    actionTaken: document.getElementById("editActionTaken").value,
     nextFollowUp: document.getElementById("editNextFollowUp").value,
     supplierContactedDate: document.getElementById("editSupplierContacted").value,
     customerUpdatedDate: document.getElementById("editCustomerUpdated").value,
@@ -915,6 +962,7 @@ function exportCSV() {
     "Supplier Contacted Date",
     "Customer Updated Date",
     "Resolved Date",
+    "Action Taken",
     "Remarks"
   ];
 
@@ -938,6 +986,7 @@ function exportCSV() {
     x.supplierContactedDate || "",
     x.customerUpdatedDate || "",
     x.resolvedDate || "",
+    x.actionTaken || "",
     x.remarks || ""
   ]);
 
