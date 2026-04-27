@@ -666,8 +666,8 @@ async function importExcel() {
         supplierShipDate || ddcShipDate || ssShipDate || calculatedDateRequested
       );
 
-      const docRef = db.collection(COLLECTION).doc(lookup);
-
+        const safeLookup = lookup.replaceAll("/", "-");
+        const docRef = db.collection(COLLECTION).doc(safeLookup);
       batch.set(docRef, {
         lookup,
         strategicAccountLead: row["Strategic Account Lead"] || "",
@@ -729,17 +729,18 @@ async function importExcel() {
    LOAD REALTIME DATA
 ========================= */
 
-let unsubscribeOOL = null;
-let isImporting = false;
-
 function loadData() {
   if (unsubscribeOOL) unsubscribeOOL();
 
+  document.getElementById("importStatus").innerText = "Loading latest records...";
+
   unsubscribeOOL = db.collection(COLLECTION)
+    .limit(500)
     .onSnapshot(snapshot => {
       if (isImporting) return;
 
       allData = [];
+
       snapshot.forEach(doc => {
         allData.push({ id: doc.id, ...doc.data() });
       });
@@ -747,10 +748,17 @@ function loadData() {
       renderTable();
       renderMetrics();
       renderCharts();
+
+      document.getElementById("importStatus").innerText =
+        `Loaded ${allData.length} records. Showing latest 500 only.`;
+    }, error => {
+      console.error("Load error:", error);
+      document.getElementById("importStatus").innerText =
+        "Load failed. Please check console.";
     });
 }
 
-
+loadData();
 /* =========================
    TABLE
 ========================= */
