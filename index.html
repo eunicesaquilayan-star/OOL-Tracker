@@ -212,6 +212,7 @@ label {
       <button class="secondary" onclick="loadData()">Refresh</button>
     </div>
     <p class="small">
+    <p id="importStatus" class="small"></p>
       Unique ID is based on the LOOKUP column. If the LOOKUP already exists, the system will update the Power BI fields and keep the specialist tracking fields.
     </p>
   </div>
@@ -525,6 +526,7 @@ async function importExcel() {
     alert("Please select an Excel file first.");
     return;
   }
+  isImporting = true;
 
   const reader = new FileReader();
 
@@ -541,11 +543,14 @@ async function importExcel() {
       alert("No data found.");
       return;
     }
+    isImporting = false;
 
     let batch = db.batch();
     let count = 0;
     let imported = 0;
 
+    const statusText = document.getElementById("importStatus");
+    statusText.innerText = "Import started. Please wait...";
     for (const row of rows) {
       const lookup = String(row["LOOKUP"] || "").trim();
 
@@ -616,6 +621,9 @@ async function importExcel() {
       count++;
       imported++;
 
+      statusText.innerText = `Importing... ${imported} rows processed`;
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       if (count === 400) {
         await batch.commit();
         batch = db.batch();
@@ -636,10 +644,16 @@ async function importExcel() {
    LOAD REALTIME DATA
 ========================= */
 
+let unsubscribeOOL = null;
+let isImporting = false;
+
 function loadData() {
-  db.collection(COLLECTION)
-    .orderBy("priority")
+  if (unsubscribeOOL) unsubscribeOOL();
+
+  unsubscribeOOL = db.collection(COLLECTION)
     .onSnapshot(snapshot => {
+      if (isImporting) return;
+
       allData = [];
       snapshot.forEach(doc => {
         allData.push({ id: doc.id, ...doc.data() });
@@ -651,7 +665,6 @@ function loadData() {
     });
 }
 
-loadData();
 
 /* =========================
    TABLE
