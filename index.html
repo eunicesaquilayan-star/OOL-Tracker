@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OOL Tracking System</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f6f9;
+  margin: 0;
+  padding: 0;
+  color: #222;
+}
+
+header {
+  background: #1f4e79;
+  color: white;
+  padding: 18px 25px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.container {
+  padding: 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+input, select, button, textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+button {
+  background: #1f4e79;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #163a5c;
+}
+
+button.secondary {
+  background: #6c757d;
+}
+
+button.danger {
+  background: #b00020;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.metric {
+  background: #f8f9fa;
+  border-left: 5px solid #1f4e79;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.metric h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.metric p {
+  margin: 8px 0 0;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  max-height: 650px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  vertical-align: top;
+}
+
+th {
+  background: #e9eef3;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.priority-high {
+  background: #ff6b6b;
+  color: white;
+  font-weight: bold;
+}
+
+.priority-medium {
+  background: #ffd966;
+  font-weight: bold;
+}
+
+.priority-low {
+  background: #93c47d;
+  color: white;
+  font-weight: bold;
+}
+
+.status-open {
+  background: #ffe5e5;
+}
+
+.status-progress {
+  background: #fff2cc;
+}
+
+.status-resolved {
+  background: #d9ead3;
+}
+
+.small {
+  font-size: 11px;
+  color: #666;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 20;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: rgba(0,0,0,0.45);
+}
+
+.modal-content {
+  background: white;
+  margin: 40px auto;
+  padding: 20px;
+  border-radius: 10px;
+  width: 95%;
+  max-width: 800px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+label {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.hidden {
+  display: none;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>OOL Open Order Line Tracking System</h1>
+  <div class="small">Power BI Excel Import + Live Specialist Tracking + Reporting Dashboard</div>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Upload Power BI Excel File</h2>
+    <div class="controls">
+      <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" />
+      <button onclick="importExcel()">Import to Firestore</button>
+      <button class="secondary" onclick="exportCSV()">Export Tracking Report</button>
+      <button class="secondary" onclick="loadData()">Refresh</button>
+    </div>
+    <p class="small">
+      Unique ID is based on the LOOKUP column. If the LOOKUP already exists, the system will update the Power BI fields and keep the specialist tracking fields.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Dashboard Metrics</h2>
+    <div class="summary">
+      <div class="metric"><h3>Total Open Lines</h3><p id="mTotal">0</p></div>
+      <div class="metric"><h3>High Priority</h3><p id="mHigh">0</p></div>
+      <div class="metric"><h3>Medium Priority</h3><p id="mMedium">0</p></div>
+      <div class="metric"><h3>Low Priority</h3><p id="mLow">0</p></div>
+      <div class="metric"><h3>Resolved</h3><p id="mResolved">0</p></div>
+      <div class="metric"><h3>Open / Follow-up</h3><p id="mOpen">0</p></div>
+      <div class="metric"><h3>Total Open Amount</h3><p id="mAmount">$0</p></div>
+      <div class="metric"><h3>Past Due</h3><p id="mPastDue">0</p></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Filters</h2>
+    <div class="controls">
+      <input type="text" id="searchBox" placeholder="Search order, customer, supplier, item..." oninput="renderTable()" />
+
+      <select id="priorityFilter" onchange="renderTable()">
+        <option value="">All Priority</option>
+        <option value="HIGH">HIGH</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="LOW">LOW</option>
+      </select>
+
+      <select id="statusFilter" onchange="renderTable()">
+        <option value="">All Status</option>
+        <option>Open</option>
+        <option>In Progress</option>
+        <option>Waiting for Supplier</option>
+        <option>Waiting for AM</option>
+        <option>Waiting for Customer</option>
+        <option>Resolved</option>
+        <option>Cancelled</option>
+      </select>
+
+      <select id="specialistFilter" onchange="renderTable()">
+        <option value="">All Specialists</option>
+      </select>
+
+      <select id="categoryFilter" onchange="renderTable()">
+        <option value="">All Categories</option>
+        <option>Backorder</option>
+        <option>Supplier Follow-up</option>
+        <option>Warehouse Follow-up</option>
+        <option>Invoice Needed</option>
+        <option>Cancellation</option>
+        <option>Missing Item</option>
+        <option>Wrong Item</option>
+        <option>Customer Update Needed</option>
+        <option>AM Escalation</option>
+        <option>Other</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Open Order Lines</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>LOOKUP</th>
+            <th>Order #</th>
+            <th>Line #</th>
+            <th>Customer</th>
+            <th>Supplier</th>
+            <th>Item</th>
+            <th>Qty Ordered</th>
+            <th>Total Open Amt</th>
+            <th>Supplier Ship Date</th>
+            <th>Priority</th>
+            <th>Specialist</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Reason</th>
+            <th>Next Follow-up</th>
+            <th>Last Updated</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Reports</h2>
+    <canvas id="priorityChart" height="90"></canvas>
+    <br />
+    <canvas id="specialistChart" height="90"></canvas>
+  </div>
+
+</div>
+
+<div class="modal" id="editModal">
+  <div class="modal-content">
+    <h2>Edit Tracking Details</h2>
+
+    <div class="grid">
+      <div>
+        <label>LOOKUP</label>
+        <input id="editLookup" disabled />
+      </div>
+
+      <div>
+        <label>Specialist</label>
+        <select id="editSpecialist"></select>
+      </div>
+
+      <div>
+        <label>Category</label>
+        <select id="editCategory">
+          <option></option>
+          <option>Backorder</option>
+          <option>Supplier Follow-up</option>
+          <option>Warehouse Follow-up</option>
+          <option>Invoice Needed</option>
+          <option>Cancellation</option>
+          <option>Missing Item</option>
+          <option>Wrong Item</option>
+          <option>Customer Update Needed</option>
+          <option>AM Escalation</option>
+          <option>Other</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Status</label>
+        <select id="editStatus">
+          <option>Open</option>
+          <option>In Progress</option>
+          <option>Waiting for Supplier</option>
+          <option>Waiting for AM</option>
+          <option>Waiting for Customer</option>
+          <option>Resolved</option>
+          <option>Cancelled</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Reason</label>
+        <select id="editReason">
+          <option></option>
+          <option>Past ship date</option>
+          <option>Backorder</option>
+          <option>Supplier delay</option>
+          <option>Warehouse delay</option>
+          <option>Need invoice</option>
+          <option>Need customer update</option>
+          <option>Need AM decision</option>
+          <option>Cancellation requested</option>
+          <option>Missing item</option>
+          <option>Wrong item</option>
+          <option>Other</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Next Follow-up Date</label>
+        <input type="date" id="editNextFollowUp" />
+      </div>
+
+      <div>
+        <label>Date Contacted Supplier</label>
+        <input type="date" id="editSupplierContacted" />
+      </div>
+
+      <div>
+        <label>Date Customer Updated</label>
+        <input type="date" id="editCustomerUpdated" />
+      </div>
+
+      <div>
+        <label>Resolved Date</label>
+        <input type="date" id="editResolvedDate" />
+      </div>
+    </div>
+
+    <br />
+
+    <label>Remarks / Action Taken</label>
+    <textarea id="editRemarks" rows="5" style="width:100%;"></textarea>
+
+    <br /><br />
+
+    <button onclick="saveTracking()">Save Changes</button>
+    <button class="secondary" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+/* =========================
+   FIREBASE CONFIG
+   Replace this with yours
+========================= */
+
+const firebaseConfig = {
+  apiKey: "PASTE_API_KEY_HERE",
+  authDomain: "PASTE_PROJECT.firebaseapp.com",
+  projectId: "PASTE_PROJECT_ID",
+  storageBucket: "PASTE_PROJECT.appspot.com",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId: "PASTE_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const COLLECTION = "ool_tracking";
+
+const specialists = [
+  "Charmaine",
+  "Jethro",
+  "Kath",
+  "Miguel",
+  "Vince",
+  "Mack",
+  "Nomer",
+  "Ella",
+  "Justine"
+];
+
+let allData = [];
+let currentEditId = null;
+let priorityChart = null;
+let specialistChart = null;
+
+function initDropdowns() {
+  const specialistFilter = document.getElementById("specialistFilter");
+  const editSpecialist = document.getElementById("editSpecialist");
+
+  specialists.forEach(name => {
+    specialistFilter.innerHTML += `<option>${name}</option>`;
+    editSpecialist.innerHTML += `<option>${name}</option>`;
+  });
+}
+
+initDropdowns();
+
+/* =========================
+   DATE + PRIORITY LOGIC
+========================= */
+
+function normalizeDate(value) {
+  if (!value) return "";
+
+  if (value instanceof Date) {
+    return value.toISOString().split("T")[0];
+  }
+
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (!parsed) return "";
+    const d = new Date(parsed.y, parsed.m - 1, parsed.d);
+    return d.toISOString().split("T")[0];
+  }
+
+  const d = new Date(value);
+  if (isNaN(d)) return "";
+  return d.toISOString().split("T")[0];
+}
+
+function calculatePriority(dateValue) {
+  if (!dateValue) return "LOW";
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const target = new Date(dateValue);
+  target.setHours(0,0,0,0);
+
+  const diffDays = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+
+  if (target < today) return "HIGH";
+  if (diffDays <= 60) return "MEDIUM";
+  return "LOW";
+}
+
+function isPastDue(dateValue) {
+  if (!dateValue) return false;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const target = new Date(dateValue);
+  target.setHours(0,0,0,0);
+  return target < today;
+}
+
+function money(value) {
+  const num = Number(value || 0);
+  return num.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD"
+  });
+}
+
+/* =========================
+   IMPORT EXCEL
+========================= */
+
+async function importExcel() {
+  const file = document.getElementById("excelFile").files[0];
+
+  if (!file) {
+    alert("Please select an Excel file first.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = async function(e) {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: "array", cellDates: true });
+
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    if (!rows.length) {
+      alert("No data found.");
+      return;
+    }
+
+    let batch = db.batch();
+    let count = 0;
+    let imported = 0;
+
+    for (const row of rows) {
+      const lookup = String(row["LOOKUP"] || "").trim();
+
+      if (!lookup) continue;
+
+      const supplierShipDate = normalizeDate(row["Supplier Ship Date"]);
+      const ddcShipDate = normalizeDate(row["DDC Ship Date"]);
+      const ssShipDate = normalizeDate(row["SS Ship Date"]);
+      const calculatedDateRequested = normalizeDate(row["Calculated Date Requested"]);
+      const orderDate = normalizeDate(row["Order Date"]);
+
+      const priority = calculatePriority(supplierShipDate || ddcShipDate || ssShipDate || calculatedDateRequested);
+
+      const docRef = db.collection(COLLECTION).doc(lookup);
+
+      batch.set(docRef, {
+        lookup,
+        strategicAccountLead: row["Strategic Account Lead"] || "",
+        shippedStatus: row["Shipped Status"] || "",
+        csd: row["CSD"] || "",
+        am: row["AM"] || "",
+        orderNumber: row["Order #"] || "",
+        lineNumber: row["Line #"] || "",
+        poCode: row["PO Code"] || "",
+        lineType: row["Line Type"] || "",
+        lineClosed: row["Line Closed"] || "",
+        itemCode: row["Item Code"] || "",
+        itemDescription: row["Item Description"] || "",
+        qtyOrdered: Number(row["Qty Ordered"] || 0),
+        sellUom: row["Sell UOM"] || "",
+        totalOpenCost: Number(row["Total Open Cost"] || 0),
+        extendedOpenAmt: Number(row["Extended Open Amt"] || 0),
+        qtySellUom: Number(row["Qty in Sell UOM"] || 0),
+        prodCode: row["Prod Code"] || "",
+        supplier: row["Supplier"] || "",
+        supplierName: row["Supplier Name"] || "",
+        customerCategory: row["Customer Category"] || "",
+        customerCategoryName: row["Customer Category Name"] || "",
+        customerPO: row["Customer PO"] || "",
+        boFlag: row["BO Flag"] || "",
+        boQty: Number(row["BO Qty"] || 0),
+        orderType: row["Order Type"] || "",
+        orderType1: row["Order Type 1"] || "",
+        ssShipDate,
+        ddcShipDate,
+        supplierShipDate,
+        orderDate,
+        calculatedDateRequested,
+        exportDate: normalizeDate(row["Export Date"]),
+        warehouse: row["Warehouse"] || "",
+        customerName: row["Customer Name"] || "",
+        supplierEmail: row["Supplier Email"] || "",
+        priority,
+
+        specialist: firebase.firestore.FieldValue.delete(),
+        category: firebase.firestore.FieldValue.delete(),
+        status: firebase.firestore.FieldValue.delete(),
+        reason: firebase.firestore.FieldValue.delete(),
+        remarks: firebase.firestore.FieldValue.delete(),
+        nextFollowUp: firebase.firestore.FieldValue.delete(),
+        supplierContactedDate: firebase.firestore.FieldValue.delete(),
+        customerUpdatedDate: firebase.firestore.FieldValue.delete(),
+        resolvedDate: firebase.firestore.FieldValue.delete(),
+
+        updatedFromPowerBIAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+      count++;
+      imported++;
+
+      if (count === 400) {
+        await batch.commit();
+        batch = db.batch();
+        count = 0;
+      }
+    }
+
+    if (count > 0) await batch.commit();
+
+    alert(`Import completed. ${imported} rows uploaded/updated.`);
+    loadData();
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+/* =========================
+   LOAD REALTIME DATA
+========================= */
+
+function loadData() {
+  db.collection(COLLECTION)
+    .orderBy("priority")
+    .onSnapshot(snapshot => {
+      allData = [];
+      snapshot.forEach(doc => {
+        allData.push({ id: doc.id, ...doc.data() });
+      });
+
+      renderTable();
+      renderMetrics();
+      renderCharts();
+    });
+}
+
+loadData();
+
+/* =========================
+   TABLE
+========================= */
+
+function renderTable() {
+  const tbody = document.getElementById("dataBody");
+  tbody.innerHTML = "";
+
+  const search = document.getElementById("searchBox").value.toLowerCase();
+  const priority = document.getElementById("priorityFilter").value;
+  const status = document.getElementById("statusFilter").value;
+  const specialist = document.getElementById("specialistFilter").value;
+  const category = document.getElementById("categoryFilter").value;
+
+  let filtered = allData.filter(row => {
+    const text = JSON.stringify(row).toLowerCase();
+
+    return (
+      (!search || text.includes(search)) &&
+      (!priority || row.priority === priority) &&
+      (!status || row.status === status) &&
+      (!specialist || row.specialist === specialist) &&
+      (!category || row.category === category)
+    );
+  });
+
+  filtered.forEach(row => {
+    const priorityClass =
+      row.priority === "HIGH" ? "priority-high" :
+      row.priority === "MEDIUM" ? "priority-medium" :
+      "priority-low";
+
+    const statusClass =
+      row.status === "Resolved" ? "status-resolved" :
+      row.status === "In Progress" || row.status?.includes("Waiting") ? "status-progress" :
+      "status-open";
+
+    const tr = document.createElement("tr");
+    tr.className = statusClass;
+
+    tr.innerHTML = `
+      <td><button onclick="openEdit('${row.id}')">Edit</button></td>
+      <td>${row.lookup || ""}</td>
+      <td>${row.orderNumber || ""}</td>
+      <td>${row.lineNumber || ""}</td>
+      <td>${row.customerName || row.customerCategoryName || ""}</td>
+      <td>${row.supplierName || row.supplier || ""}</td>
+      <td>${row.itemCode || ""}<br><span class="small">${row.itemDescription || ""}</span></td>
+      <td>${row.qtyOrdered || 0}</td>
+      <td>${money(row.extendedOpenAmt)}</td>
+      <td>${row.supplierShipDate || row.ddcShipDate || row.ssShipDate || ""}</td>
+      <td class="${priorityClass}">${row.priority || ""}</td>
+      <td>${row.specialist || ""}</td>
+      <td>${row.category || ""}</td>
+      <td>${row.status || "Open"}</td>
+      <td>${row.reason || ""}</td>
+      <td>${row.nextFollowUp || ""}</td>
+      <td>${row.updatedAt?.toDate ? row.updatedAt.toDate().toLocaleString() : ""}</td>
+      <td>${row.remarks || ""}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* =========================
+   EDIT MODAL
+========================= */
+
+function openEdit(id) {
+  currentEditId = id;
+  const row = allData.find(x => x.id === id);
+
+  document.getElementById("editLookup").value = row.lookup || "";
+  document.getElementById("editSpecialist").value = row.specialist || "";
+  document.getElementById("editCategory").value = row.category || "";
+  document.getElementById("editStatus").value = row.status || "Open";
+  document.getElementById("editReason").value = row.reason || "";
+  document.getElementById("editNextFollowUp").value = row.nextFollowUp || "";
+  document.getElementById("editSupplierContacted").value = row.supplierContactedDate || "";
+  document.getElementById("editCustomerUpdated").value = row.customerUpdatedDate || "";
+  document.getElementById("editResolvedDate").value = row.resolvedDate || "";
+  document.getElementById("editRemarks").value = row.remarks || "";
+
+  document.getElementById("editModal").style.display = "block";
+}
+
+function closeModal() {
+  document.getElementById("editModal").style.display = "none";
+}
+
+async function saveTracking() {
+  if (!currentEditId) return;
+
+  const status = document.getElementById("editStatus").value;
+  let resolvedDate = document.getElementById("editResolvedDate").value;
+
+  if (status === "Resolved" && !resolvedDate) {
+    resolvedDate = new Date().toISOString().split("T")[0];
+  }
+
+  await db.collection(COLLECTION).doc(currentEditId).set({
+    specialist: document.getElementById("editSpecialist").value,
+    category: document.getElementById("editCategory").value,
+    status,
+    reason: document.getElementById("editReason").value,
+    nextFollowUp: document.getElementById("editNextFollowUp").value,
+    supplierContactedDate: document.getElementById("editSupplierContacted").value,
+    customerUpdatedDate: document.getElementById("editCustomerUpdated").value,
+    resolvedDate,
+    remarks: document.getElementById("editRemarks").value,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  closeModal();
+}
+
+/* =========================
+   METRICS
+========================= */
+
+function renderMetrics() {
+  const total = allData.length;
+  const high = allData.filter(x => x.priority === "HIGH").length;
+  const medium = allData.filter(x => x.priority === "MEDIUM").length;
+  const low = allData.filter(x => x.priority === "LOW").length;
+  const resolved = allData.filter(x => x.status === "Resolved").length;
+  const open = allData.filter(x => x.status !== "Resolved" && x.status !== "Cancelled").length;
+  const amount = allData.reduce((sum, x) => sum + Number(x.extendedOpenAmt || 0), 0);
+  const pastDue = allData.filter(x => isPastDue(x.supplierShipDate || x.ddcShipDate || x.ssShipDate)).length;
+
+  document.getElementById("mTotal").innerText = total;
+  document.getElementById("mHigh").innerText = high;
+  document.getElementById("mMedium").innerText = medium;
+  document.getElementById("mLow").innerText = low;
+  document.getElementById("mResolved").innerText = resolved;
+  document.getElementById("mOpen").innerText = open;
+  document.getElementById("mAmount").innerText = money(amount);
+  document.getElementById("mPastDue").innerText = pastDue;
+}
+
+/* =========================
+   CHARTS
+========================= */
+
+function renderCharts() {
+  const priorityCounts = {
+    HIGH: allData.filter(x => x.priority === "HIGH").length,
+    MEDIUM: allData.filter(x => x.priority === "MEDIUM").length,
+    LOW: allData.filter(x => x.priority === "LOW").length
+  };
+
+  const specialistCounts = {};
+  specialists.forEach(name => {
+    specialistCounts[name] = allData.filter(x => x.specialist === name).length;
+  });
+
+  if (priorityChart) priorityChart.destroy();
+  if (specialistChart) specialistChart.destroy();
+
+  priorityChart = new Chart(document.getElementById("priorityChart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(priorityCounts),
+      datasets: [{
+        label: "Priority Count",
+        data: Object.values(priorityCounts)
+      }]
+    }
+  });
+
+  specialistChart = new Chart(document.getElementById("specialistChart"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(specialistCounts),
+      datasets: [{
+        label: "Assigned Lines per Specialist",
+        data: Object.values(specialistCounts)
+      }]
+    }
+  });
+}
+
+/* =========================
+   EXPORT CSV
+========================= */
+
+function exportCSV() {
+  const headers = [
+    "LOOKUP",
+    "Order #",
+    "Line #",
+    "Customer",
+    "Supplier",
+    "Item Code",
+    "Item Description",
+    "Qty Ordered",
+    "Total Open Amount",
+    "Supplier Ship Date",
+    "Priority",
+    "Specialist",
+    "Category",
+    "Status",
+    "Reason",
+    "Next Follow-up",
+    "Supplier Contacted Date",
+    "Customer Updated Date",
+    "Resolved Date",
+    "Remarks"
+  ];
+
+  const rows = allData.map(x => [
+    x.lookup || "",
+    x.orderNumber || "",
+    x.lineNumber || "",
+    x.customerName || x.customerCategoryName || "",
+    x.supplierName || x.supplier || "",
+    x.itemCode || "",
+    x.itemDescription || "",
+    x.qtyOrdered || 0,
+    x.extendedOpenAmt || 0,
+    x.supplierShipDate || "",
+    x.priority || "",
+    x.specialist || "",
+    x.category || "",
+    x.status || "",
+    x.reason || "",
+    x.nextFollowUp || "",
+    x.supplierContactedDate || "",
+    x.customerUpdatedDate || "",
+    x.resolvedDate || "",
+    x.remarks || ""
+  ]);
+
+  const csv = [headers, ...rows]
+    .map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "OOL_Tracking_Report.csv";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
