@@ -510,6 +510,9 @@ let currentEditId = null;
 let priorityChart = null;
 let specialistChart = null;
 
+let unsubscribeOOL = null;
+let isImporting = false;
+
 function initDropdowns() {
   const specialistFilter = document.getElementById("specialistFilter");
   const editSpecialist = document.getElementById("editSpecialist");
@@ -730,11 +733,14 @@ async function importExcel() {
 ========================= */
 
 function loadData() {
+
+
   if (unsubscribeOOL) unsubscribeOOL();
 
   document.getElementById("importStatus").innerText = "Loading latest records...";
 
   unsubscribeOOL = db.collection(COLLECTION)
+    .orderBy("updatedFromPowerBIAt", "desc")
     .limit(500)
     .onSnapshot(snapshot => {
       if (isImporting) return;
@@ -757,7 +763,6 @@ function loadData() {
         "Load failed. Please check console.";
     });
 }
-
 loadData();
 /* =========================
    TABLE
